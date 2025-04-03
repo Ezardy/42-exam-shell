@@ -6,6 +6,8 @@ import { glob } from 'glob';
 import { homedir, tmpdir } from 'os';
 import { basename, resolve } from 'path';
 import { stdout } from 'process';
+import prompts from 'prompts';
+import { EventEmitter } from 'stream';
 
 import checker from 'checker/index';
 import valgrind from 'checker/valgrind';
@@ -18,7 +20,7 @@ import i18n, { lang } from 'langs/index';
 import examList from './exams';
 import { examDefinition } from './interface';
 
-export default class {
+export default class extends EventEmitter {
 	private exams: examDefinition[];
 	public options: { infinite: boolean; doom: boolean; lang: lang };
 	private timer: {
@@ -53,6 +55,7 @@ export default class {
 	};
 
 	constructor(id: string, options: { infinite: boolean; doom: boolean; lang: lang }) {
+		super();
 		this.exams = [ ...examList, ...customExamList() ];
 	
 		const idSelected = this.exams.findIndex((e) => e.id === id);
@@ -134,13 +137,32 @@ export default class {
 		});
 	}
 
-	stop(): Promise<void> {
+	stop(): Promise<'restart' | 'exit'> {
 		return new Promise((res) => {
 			if (this.timer.interval)
 				clearInterval(this.timer.interval as NodeJS.Timeout);
-			rm(this.git.temp, { recursive: true, force: true })
-				.then(() => res())
-				.catch(() => res());
+			prompts({
+				type: 'confirm',
+				name: 'restart',
+				message: i18n('restart.question', this.options.lang) as string,
+				initial: false
+			})
+				.then((d) => {
+					if (d.restart) {
+						this.emit('restart');
+						return res('restart');
+					}
+					throw new Error();
+				})
+				.catch((e) => {
+					if (e.isTtyError)
+						error(5, { exit: true });
+					else
+						console.error(e.message);
+					rm(this.git.temp, { recursive: true, force: true })
+						.then(() => res('exit'))
+						.catch(() => res('exit'));
+				});
 		});
 	}
 
@@ -246,7 +268,7 @@ export default class {
 						? stderr
 						: `errno: ${err?.code}`, true).then(() => res()).catch(() => res());
 				} else {
-					this.testexercise()
+					this.testExercise()
 						.then(() => {
 							this.success(spin)
 								.then(() => res())
@@ -262,7 +284,7 @@ export default class {
 		});
 	}
 
-	private async testexercise(): Promise<void> {
+	private async testExercise(): Promise<void> {
 		return new Promise((res: () => void, rej: (e: { data: any, force?: boolean }) => void) => {
 			const exercise = this.exams[this.exam.id].exercises[this.exam.currentStep][this.exam.exerciseSelected];
 			const handleKillCommand = /^make.bash: +line +\d+: +\d+ Killed +.*$/m;
