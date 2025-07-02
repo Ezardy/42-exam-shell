@@ -27,7 +27,7 @@ int	main(int argc, char **argv)
 {
 	fd_set reads, writes;
 	char buffer[BUFFER_SIZE];
-	int flag_ln = 0, do_send = 0, sockfd = 0;
+	int do_send = 0, sockfd = 0;
 	struct sockaddr_in server_addr;
 
 	if (argc < 2)
@@ -68,7 +68,6 @@ int	main(int argc, char **argv)
 				size_t length = strlen(buffer);
 				send(sockfd, buffer, length, MSG_DONTWAIT);
 				do_send = 0;
-				flag_ln++;
 			}
 			if (FD_ISSET(STDIN_FILENO, &reads))
 			{
